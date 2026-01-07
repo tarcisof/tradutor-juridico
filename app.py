@@ -121,7 +121,11 @@ if st.button("✨ Gerar Explicação"):
                 Tom: {tom_de_voz}.
                 Texto Original: "{st.session_state.texto_processo}"
                 
-                Regras: Português simples, breve, use emojis. 
+                Regras:
+                1. Português simples, breve e empático.
+                2. Use emojis moderados.
+                3. Coloque PRAZOS e DATAS em negrito (ex: *15 dias*).
+                4. IMPORTANTE: Nunca garanta vitória ou resultados, diga que é uma etapa.
                 """
 
                 with st.spinner("Traduzindo..."):
