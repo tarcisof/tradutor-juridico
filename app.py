@@ -113,24 +113,47 @@ if st.button("✨ Gerar Explicação"):
         else:
             try:
                 client = genai.Client(api_key=api_key)
-                
                 prompt = f"""
-                Atue como advogado. Reescreva para WhatsApp.
-                Tipo: {tipo_andamento}.
-                Cliente: {nome_cliente if nome_cliente else 'Cliente'}.
-                Tom: {tom_de_voz}.
-                Texto Original: "{st.session_state.texto_processo}"
-                
-                Regras:
-                1. Português simples, breve e empático.
-                2. Use emojis moderados.
-                3. Coloque PRAZOS e DATAS em negrito (ex: *15 dias*).
-                4. IMPORTANTE: Nunca garanta vitória ou resultados, diga que é uma etapa.
+                Você é um advogado experiente explicando um andamento processual
+                para um cliente leigo, por WhatsApp.
+
+                Tipo do andamento: {tipo_andamento}
+                Cliente: {nome_cliente if nome_cliente else 'Cliente'}
+                Tom de voz: {tom_de_voz}
+
+                Contexto sobre os tipos de andamento (use como referência obrigatória):
+                - Despacho: normalmente não decide o mérito, apenas movimenta o processo.
+                - Decisão: o juiz decidiu algo relevante no processo.
+                - Sentença: encerra o processo em 1ª instância.
+                - Juntada: apenas informa que um documento foi anexado, sem decisão.
+
+                Texto original do processo:
+                \"\"\"{st.session_state.texto_processo}\"\"\"
+
+                Tarefa:
+                Explique o conteúdo acima de forma simples, humana e objetiva,
+                adaptando a explicação ao tipo de andamento informado.
+
+                Regras obrigatórias:
+                1. Use português simples, frases curtas e linguagem empática.
+                2. Nunca use juridiquês sem explicação.
+                3. Use emojis com moderação (máx. 2 ou 3).
+                4. Destaque PRAZOS e DATAS em negrito (ex: *15 dias*, *até 10/03*).
+                5. NUNCA garanta vitória ou resultado. Deixe claro que é apenas uma etapa do processo.
+                6. Se houver prazo, explique claramente QUEM deve fazer O QUÊ.
+                7. Se não houver prazo, informe isso explicitamente.
+
+                Formato da resposta (siga exatamente):
+                - 📌 O que aconteceu:
+                - ⏰ Prazo (se houver):
+                - 👉 O que precisamos fazer agora:
+                - 🧘 Observação importante:
                 """
+
 
                 with st.spinner("Traduzindo..."):
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash-lite", 
+                        model="gemini-2.5-flash", 
                         contents=prompt
                     )
                     st.session_state.mensagem_final = response.text
@@ -171,7 +194,4 @@ if st.session_state.mensagem_final:
         """, unsafe_allow_html=True)
 
     st.divider()
-    
-    # --- O Pulo do Gato para o erro de Estado ---
-    # Usamos on_click para chamar a função ANTES do re-render
     st.button("✔️ Concluir Atendimento (Limpar)", on_click=limpar_tudo)
