@@ -284,7 +284,7 @@ with st.sidebar:
                 cursor: pointer;
                 margin-bottom: 20px;
             ">
-                ⭐ VIRAR PRO
+                ⭐ VIRE PREMIUM
             </div>
         </a>
         """, unsafe_allow_html=True)
@@ -478,7 +478,7 @@ with tab_historico:
     if info["plan_status"] == "free":
         st.info("ℹ️ Plano Grátis: Você vê o histórico das últimas 24 horas.")
     else:
-        st.success("💎 Plano Pro: Visualizando histórico completo do mês.")
+        st.success("💎 Plano Premium: Visualizando histórico completo do mês.")
 
     if st.button("🔄 Atualizar Histórico"):
         st.rerun()
