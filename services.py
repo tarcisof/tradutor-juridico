@@ -10,31 +10,63 @@ key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key) if url and key else None
 
 class SaaSLogger:
-    
+    @staticmethod
+    def is_rate_limited(user_id):
+        """
+        Verifica se o usuário está abusando da API (Anti-Bot).
+        Regra: Máximo de 10 requisições nos últimos 5 minutos.
+        """
+        if not supabase: return False
+
+        try:
+            # Define a janela de tempo (ex: 5 minutos atrás)
+            time_window = datetime.now(timezone.utc) - timedelta(minutes=5)
+            
+            # Conta quantas gerações esse usuário fez nessa janela
+            # count='exact', head=True -> Só conta, não baixa os dados (rápido e leve)
+            response = supabase.table("generation_logs") \
+                .select("*", count="exact", head=True) \
+                .eq("user_id", user_id) \
+                .gte("created_at", time_window.isoformat()) \
+                .execute()
+            
+            total_recentes = response.count
+
+            # LIMITE DE SEGURANÇA
+            # Se fez mais de 10 requisições em 5 minutos, trava.
+            if total_recentes >= 10:
+                print(f"🚫 Rate Limit atingido para {user_id}: {total_recentes} reqs em 5min.")
+                return True
+            
+            return False
+
+        except Exception as e:
+            print(f"⚠️ Erro ao verificar rate limit: {e}")
+            return False # Na dúvida, libera (fail open)
+
     @staticmethod
     def check_can_generate(user_id):
         """
-        Consulta simples: Usuário existe? É PRO? Tem Créditos?
-        Retorna True (Pode usar) ou False (Bloqueado).
+        Consulta: Usuário existe? É PRO? Tem Créditos? + Rate Limit
         """
-        # Se não tiver banco configurado, libera (Modo Dev)
         if not supabase: return True 
         
         try:
-            # Busca apenas as colunas necessárias
+            # 1. NOVO: Verifica Rate Limit ANTES de tudo
+            if SaaSLogger.is_rate_limited(user_id):
+                return "rate_limit" # Retorna um código específico
+
+            # Busca dados do usuário
             response = supabase.table("profiles").select("plan_status, credits_balance").eq("id", user_id).execute()
-            data = response.data # Retorna lista [] ou [{'plan_status':...}]
+            data = response.data
             
-            # 1. Se lista vazia, usuário não existe no banco -> Bloqueia
-            if not data:
-                print(f"🚫 Acesso negado: Usuário '{user_id}' não encontrado.")
-                return False
+            if not data: return False
 
             user = data[0]
             status = user.get('plan_status')
             creditos = user.get('credits_balance', 0)
 
-            # 2. Se for VIP (Admin/Pro), libera geral
+            # 2. Se for VIP (Admin/Pro), libera
             if status in ['pro_monthly', 'pro_annual', 'admin']:
                 return True
             
@@ -42,12 +74,11 @@ class SaaSLogger:
             if status == 'free' and creditos > 0:
                 return True
             
-            # Se chegou aqui, é Free e sem saldo
             return False
 
         except Exception as e:
-            print(f"⚠️ Erro de conexão ao verificar permissão: {e}")
-            return False # Por segurança, bloqueia se o banco der erro crítico
+            print(f"⚠️ Erro de permissão: {e}")
+            return False
 
     @staticmethod
     def refresh_free_credits_if_needed(user_id):

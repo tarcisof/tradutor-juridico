@@ -172,6 +172,33 @@ details summary svg {
 </style>
 """, unsafe_allow_html=True)
 
+def tela_landing():
+    st.markdown("<h1>TraduzJur</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p>Converta juridiquês em mensagens claras para seus clientes.</p>",
+        unsafe_allow_html=True
+    )
+
+    st.components.v1.html(
+        """
+        <iframe
+            src="https://www.canva.com/design/DAG_krSfmFw/J49a-BmGXUQxRFUCbCbuKQ/view?embed"
+            style="width:100%; height:900px; border:none; border-radius:12px;"
+            loading="lazy"
+            allowfullscreen>
+        </iframe>
+        """,
+        height=920
+    )
+
+    if st.button("🚀 Entrar no TraduzJur", use_container_width=True):
+        st.session_state.tela = "login"
+        st.rerun()
+
+
+if "tela" not in st.session_state:
+    st.session_state.tela = "landing"
+
 # =============================
 # 2. Autenticação (Porteiro)
 # =============================
@@ -203,6 +230,24 @@ if "texto_processo" not in st.session_state:
 # Interface Principal
 st.markdown("<h1>TraduzJur</h1>", unsafe_allow_html=True)
 st.markdown("<p class='caption-text'>Converta juridiquês em mensagens claras e envie para o cliente.</p>", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+        input::placeholder {
+            color: #AAAAAA !important;
+            opacity: 1;
+        }
+        input::-moz-placeholder {
+            color: #AAAAAA !important;
+            opacity: 1;
+        }
+        input:-ms-input-placeholder {
+            color: #AAAAAA !important;
+        }
+        </style>
+""", unsafe_allow_html=True)
+
+nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: Sr. João")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -247,23 +292,25 @@ with st.sidebar:
             
             # Define cor do status
             status_color = "green" if info['plan_status'] != 'free' else "orange"
-            st.markdown(f"**Plano:** :{status_color}[{info['plan_status'].upper()}]")
             
             # Se for Free, mostra saldo e tempo
             if info["plan_status"] == "free":
+                st.write(f"**Plano:** Gratuito")
                 st.write(f"**Créditos:** {info['credits_balance']}")
                 
                 last_reset = info.get("last_credit_reset")
                 reset_em = SaaSLogger.time_until_next_reset(last_reset)
 
-                # Dica visual: Se tiver 0 créditos, chama mais atenção (warning)
-                # Se tiver créditos, fica discreto (caption)
                 if info['credits_balance'] == 0:
                     st.warning(f"⏳ Renova **{reset_em}**")
                 else:
                     st.caption(f"🔄 Renova **{reset_em}**")
 
-
+            # Para o plano Pro
+            elif info["plan_status"] == "pro_monthly":
+                st.write(f"**Plano:** Premium")
+                # Adicione aqui outras informações específicas do plano Premium se necessário
+                st.success("✅ Plano Premium ativo")
 
     if info["plan_status"] == "free":
         
@@ -284,7 +331,7 @@ with st.sidebar:
                 cursor: pointer;
                 margin-bottom: 20px;
             ">
-                ⭐ VIRE PREMIUM
+                ⭐ Fazer Upgrade
             </div>
         </a>
         """, unsafe_allow_html=True)
@@ -303,36 +350,13 @@ with st.sidebar:
         horizontal=True,
         label_visibility="collapsed"
     )
-
-    st.markdown("""
-        <style>
-        /* Placeholder do input */
-        input::placeholder {
-            color: black !important;
-            opacity: 1; /* importante pro Chrome */
-        }
-
-        /* Firefox */
-        input::-moz-placeholder {
-            color: black !important;
-            opacity: 1;
-        }
-
-        /* Edge / IE */
-        input:-ms-input-placeholder {
-            color: black !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: Sr. João")
     
     if st.button("🚪 Sair", key="btn_logout_sidebar"):
         logout()
 
 # --- ÁREA CENTRAL ---
 texto_input = st.text_area(
-    "Cole o texto do processo aqui:",
+    "Cole APENAS O DISPOSTIVO DO PROCESSO:",
     height=200,
     key="texto_processo",
     placeholder="Ex: Certifico e dou fé que, em cumprimento ao r. despacho de fls..."
@@ -391,6 +415,9 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
                        - Utilize o termo “Cliente”.
 
                     6. Escreva como se estivesse explicando para alguém sem conhecimento jurídico.
+                    7. Coloque apenas dois arestisticos. Exemplo ("Olá, *Cliente*")
+                    8. Nunca coloque as respostas como vitória ou derrota processual, apenas como andamento.
+                    9. Leve muito em consideração o tom de voz passado.
 
                     FORMATO DE SAÍDA (obrigatório):
                     - 📌 O que aconteceu: resumo em **1 frase simples**, sem termos técnicos.
