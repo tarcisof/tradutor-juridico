@@ -370,16 +370,33 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
                     - Texto Original: \"\"\"{st.session_state.texto_processo}\"\"\"
 
                     REGRAS DE OURO:
-                    1. Traduza termos técnicos (ex: 'conclusos', 'certifico').
-                    2. Se tiver PRAZO, coloque em negrito com apenas uma estrela (ex: *15 dias*).
-                    3. Seja tranquilizador, mas realista (não garanta ganho de causa).
-                    4. Use parágrafos curtos.
-                    5. Se não tiver nome do Cliente, chame de Cliente.
-                    
-                    FORMATO DE SAÍDA:
-                    - 📌 O que aconteceu: (Resumo em 1 frase simples)
-                    - 📅 Prazos/Datas: (Se houver)
-                    - 👉 Próximo Passo: (O que o advogado ou cliente fará)
+                    1. Traduza termos técnicos jurídicos para linguagem simples.
+                       - Se necessário, explique brevemente entre parênteses.
+                       - Ex: "conclusos" → "o processo foi enviado ao juiz para decisão".
+
+                    2. Se houver PRAZO ou DATA IMPORTANTE:
+                       - Destaque APENAS o prazo usando negrito com uma única estrela.
+                       - Exemplo correto: *15 dias*
+                       - Não use negrito para mais nada.
+
+                    3. Adote um tom:
+                       - Calmo, profissional e tranquilizador.
+                       - Nunca prometa resultado ou vitória no processo.
+
+                    4. Use parágrafos curtos e frases diretas.
+                       - Evite blocos longos de texto.
+                       - Priorize clareza em vez de formalidade.
+
+                    5. Se o nome do cliente não estiver informado:
+                       - Utilize o termo “Cliente”.
+
+                    6. Escreva como se estivesse explicando para alguém sem conhecimento jurídico.
+
+                    FORMATO DE SAÍDA (obrigatório):
+                    - 📌 O que aconteceu: resumo em **1 frase simples**, sem termos técnicos.
+                    - 📅 Prazos/Datas: informe apenas se houver prazo ou data relevante.
+                    - 👉 Próximo passo: explique claramente o que será feito a seguir e por quem.
+
                     """
 
                     with st.spinner("Analisando processo..."):
