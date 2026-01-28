@@ -1,7 +1,7 @@
 import os
 from supabase import create_client, Client
-from datetime import datetime
 from dotenv import load_dotenv
+from datetime import datetime, timedelta, timezone
 
 load_dotenv()
 
@@ -48,6 +48,42 @@ class SaaSLogger:
         except Exception as e:
             print(f"⚠️ Erro de conexão ao verificar permissão: {e}")
             return False # Por segurança, bloqueia se o banco der erro crítico
+
+    @staticmethod
+    def refresh_free_credits_if_needed(user_id):
+        """Reseta créditos FREE com correção de timezone"""
+        if not supabase: return
+
+        try:
+            response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+            if not response.data: return
+
+            user = response.data
+            if user["plan_status"] != "free": return
+
+            # CORREÇÃO AQUI: Agora usamos o horário COM fuso UTC
+            now = datetime.now(timezone.utc)
+            
+            should_reset = False
+            
+            if user["last_credit_reset"] is None:
+                should_reset = True
+            else:
+                # O banco já manda com fuso (+00:00), agora o 'now' também tem. Casamento perfeito.
+                last_reset = datetime.fromisoformat(user["last_credit_reset"])
+                
+                if now - last_reset >= timedelta(hours=24):
+                    should_reset = True
+
+            if should_reset:
+                supabase.table("profiles").update({
+                    "credits_balance": 3,
+                    "last_credit_reset": now.isoformat()
+                }).eq("id", user_id).execute()
+                
+        except Exception as e:
+            print(f"🔥 ERRO NO RESET: {e}")
+
 
     @staticmethod
     def log_generation(user_id, input_text, output_text, model, tokens_in, tokens_out, time_taken):
@@ -106,3 +142,85 @@ class SaaSLogger:
             }).execute()
         except:
             pass
+
+    @staticmethod
+    def get_history(user_id, plan_status):
+        """Busca o histórico baseado no plano"""
+        try:
+            # Define o limite de tempo baseado no plano
+            if plan_status == 'free':
+                time_limit = datetime.utcnow() - timedelta(hours=24)
+            else:
+                # Plano pago/vitalício: último mês (ou mais, se preferir)
+                time_limit = datetime.utcnow() - timedelta(days=30)
+            
+            # Formata para string ISO compatível com Supabase
+            time_limit_str = time_limit.isoformat()
+
+            response = supabase.table("generation_logs")\
+                .select("input_text, output_text, created_at")\
+                .eq("user_id", user_id)\
+                .gte("created_at", time_limit_str)\
+                .order("created_at", desc=True)\
+                .execute()
+            
+            return response.data if response.data else []
+        except Exception as e:
+            print(f"Erro ao buscar histórico: {e}")
+            return []
+
+    @staticmethod
+    def time_until_next_reset(last_reset_str):
+        """Calcula tempo restante com proteção de fuso horário"""
+        if not last_reset_str:
+            return "agora"
+
+        try:
+            # Data do último reset (Vem do banco COM fuso)
+            last_reset_dt = datetime.fromisoformat(last_reset_str)
+            
+            # Próximo reset é +24h
+            next_reset = last_reset_dt + timedelta(hours=24)
+            
+            # CORREÇÃO: Pegamos o 'agora' usando o MESMO fuso da data do banco
+            now = datetime.now(last_reset_dt.tzinfo)
+
+            if now >= next_reset:
+                return "agora"
+
+            remaining = next_reset - now
+            
+            total_seconds = int(remaining.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            
+            return f"em {hours}h {minutes}min"
+            
+        except Exception as e:
+            print(f"Erro calculando tempo: {e}")
+            return "em breve"
+
+    @staticmethod
+    def ensure_credit_reset_initialized(user_id):
+        """Garante que last_credit_reset nunca seja NULL"""
+        if not supabase:
+            return None
+
+        response = supabase.table("profiles") \
+            .select("last_credit_reset") \
+            .eq("id", user_id) \
+            .single() \
+            .execute()
+
+        last_reset = response.data.get("last_credit_reset")
+
+        if last_reset is None:
+            now_utc = datetime.utcnow().isoformat()
+
+            supabase.table("profiles").update({
+                "last_credit_reset": now_utc
+            }).eq("id", user_id).execute()
+
+            return now_utc
+
+        return last_reset

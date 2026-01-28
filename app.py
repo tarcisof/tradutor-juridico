@@ -6,6 +6,9 @@ import os
 import time 
 from services import SaaSLogger, supabase
 from auth import tela_login, logout
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from urllib.parse import quote, urlencode
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -47,8 +50,7 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #E5E7EB;
 }
 
-/* -------------------- BOTÕES (CORRIGIDO) -------------------- */
-/* Força a cor do texto para BRANCO em todos os estados */
+/* -------------------- BOTÕES -------------------- */
 div.stButton > button {
     background-color: #2723ed !important;
     color: #FFFFFF !important; 
@@ -60,13 +62,12 @@ div.stButton > button {
     box-shadow: 0 4px 6px rgba(39, 35, 237, 0.2);
 }
 
-/* Garante que o texto dentro do botão também fique branco */
 div.stButton > button p {
     color: #FFFFFF !important;
 }
 
 div.stButton > button:hover {
-    background-color: #1a16c4 !important; /* Azul mais escuro no hover */
+    background-color: #1a16c4 !important;
     color: #FFFFFF !important;
     box-shadow: 0 6px 12px rgba(39, 35, 237, 0.4);
     transform: translateY(-1px);
@@ -78,26 +79,22 @@ div.stButton > button:active {
     transform: translateY(0);
 }
 
-/* Botão Secundário (Sair) - Opcional, para diferenciar */
-div[data-testid="stVerticalBlock"] > div > div[data-testid="stButton"] > button:has(div:contains("Sair")) {
-    background-color: #EF4444 !important; /* Vermelho para sair */
-}
-
 /* -------------------- INPUTS & SELETORES -------------------- */
-.stTextArea textarea, .stTextInput input, .stSelectbox div[data-baseweb="select"] {
+.stTextArea textarea,
+.stTextInput input,
+.stSelectbox div[data-baseweb="select"] {
     background-color: #FFFFFF !important;
     color: #000000 !important;
     border: 1px solid #CBD5E1 !important;
     border-radius: 8px !important;
 }
 
-/* Foco com a cor azul */
-.stTextArea textarea:focus, .stTextInput input:focus {
+.stTextArea textarea:focus,
+.stTextInput input:focus {
     border-color: #2723ed !important;
     box-shadow: 0 0 0 2px rgba(39, 35, 237, 0.2) !important;
 }
 
-/* Radio Buttons (Seleção de Tom e Tipo) */
 div[role="radiogroup"] label {
     background-color: #F1F5F9;
     padding: 8px 16px;
@@ -108,15 +105,50 @@ div[role="radiogroup"] label {
     transition: all 0.2s;
 }
 
-/* Quando passa o mouse no seletor */
 div[role="radiogroup"] label:hover {
     border-color: #2723ed;
     color: #2723ed !important;
 }
 
-/* O item selecionado (bolinha) */
 div[role="radiogroup"] [data-baseweb="radio"] {
     accent-color: #2723ed !important;
+}
+
+/* -------------------- EXPANDER (CORREÇÃO DEFINITIVA) -------------------- */
+details {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+details summary {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+}
+
+details summary:hover {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+}
+
+/* Quando expandido */
+details[open] {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+}
+
+/* Conteúdo interno do expander */
+details[open] > div {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+}
+
+/* Setinha sempre preta */
+details summary svg {
+    fill: #000000 !important;
+    stroke: #000000 !important;
 }
 
 /* -------------------- WHATSAPP BUTTON -------------------- */
@@ -133,13 +165,12 @@ div[role="radiogroup"] [data-baseweb="radio"] {
     margin-top: 20px;
     transition: transform 0.2s;
 }
+
 .whatsapp-btn:hover {
     transform: scale(1.02);
 }
-
 </style>
 """, unsafe_allow_html=True)
-
 
 # =============================
 # 2. Autenticação (Porteiro)
@@ -187,14 +218,52 @@ with st.sidebar:
     except:
         info = {"plan_status": "erro", "credits_balance": 0}
 
-    with st.expander("👤 Minha Conta", expanded=True):
-        st.write(f"**Email:** {USER_ID_ATUAL}")
-        
-        status_color = "green" if info['plan_status'] != 'free' else "orange"
-        st.markdown(f"**Plano:** :{status_color}[{info['plan_status'].upper()}]")
-        
+    with st.sidebar:
+        USER_ID_ATUAL = st.session_state.user_id
+
+        # ---------------------------------------------------------
+        # 1. BUSCA DADOS INICIAIS
+        # ---------------------------------------------------------
+        try:
+            dados = supabase.table("profiles").select("*").eq("id", USER_ID_ATUAL).execute()
+            info = dados.data[0] if dados.data else {"plan_status": "free", "credits_balance": 0, "last_credit_reset": None}
+        except:
+            info = {"plan_status": "free", "credits_balance": 0, "last_credit_reset": None}
+
+        # ---------------------------------------------------------
+        # 2. VERIFICAÇÃO DE RESET (CRÍTICO PARA O TEMPO APARECER CERTO)
+        # ---------------------------------------------------------
         if info["plan_status"] == "free":
-            st.write(f"**Créditos:** {info['credits_balance']}")
+            SaaSLogger.refresh_free_credits_if_needed(USER_ID_ATUAL)
+            dados_refresh = supabase.table("profiles").select("*").eq("id", USER_ID_ATUAL).execute()
+            if dados_refresh.data:
+                info = dados_refresh.data[0]
+
+        # ---------------------------------------------------------
+        # 3. VISUALIZAÇÃO (SEU CÓDIGO AQUI)
+        # ---------------------------------------------------------
+        with st.expander("👤 Minha Conta", expanded=True):
+            st.write(f"**Email:** {USER_ID_ATUAL}")
+            
+            # Define cor do status
+            status_color = "green" if info['plan_status'] != 'free' else "orange"
+            st.markdown(f"**Plano:** :{status_color}[{info['plan_status'].upper()}]")
+            
+            # Se for Free, mostra saldo e tempo
+            if info["plan_status"] == "free":
+                st.write(f"**Créditos:** {info['credits_balance']}")
+                
+                last_reset = info.get("last_credit_reset")
+                reset_em = SaaSLogger.time_until_next_reset(last_reset)
+
+                # Dica visual: Se tiver 0 créditos, chama mais atenção (warning)
+                # Se tiver créditos, fica discreto (caption)
+                if info['credits_balance'] == 0:
+                    st.warning(f"⏳ Renova **{reset_em}**")
+                else:
+                    st.caption(f"🔄 Renova **{reset_em}**")
+
+
 
     if info["plan_status"] == "free":
         
@@ -220,8 +289,7 @@ with st.sidebar:
         </a>
         """, unsafe_allow_html=True)
 
-    st.divider()
-    st.header("Configuração")
+    st.markdown("<h2 style='color: black; margin-bottom: 10px;'>Configuração</h2>", unsafe_allow_html=True)
 
     tipo_andamento = st.selectbox(
         "Tipo de documento:",
@@ -236,9 +304,28 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: Sr. João")
+    st.markdown("""
+        <style>
+        /* Placeholder do input */
+        input::placeholder {
+            color: black !important;
+            opacity: 1; /* importante pro Chrome */
+        }
 
-    st.divider()
+        /* Firefox */
+        input::-moz-placeholder {
+            color: black !important;
+            opacity: 1;
+        }
+
+        /* Edge / IE */
+        input:-ms-input-placeholder {
+            color: black !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    nome_cliente = st.text_input("Nome do Cliente", placeholder="Ex: Sr. João")
     
     if st.button("🚪 Sair", key="btn_logout_sidebar"):
         logout()
@@ -259,7 +346,6 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
         st.warning("⚠️ Por favor, cole o texto do processo primeiro.")
         
     else:
-        # Checagem de Saldo
         if not SaaSLogger.check_can_generate(USER_ID_ATUAL):
              st.error("🔒 Seus créditos acabaram! Faça o upgrade para continuar.")
              
@@ -288,6 +374,7 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
                     2. Se tiver PRAZO, coloque em negrito com apenas uma estrela (ex: *15 dias*).
                     3. Seja tranquilizador, mas realista (não garanta ganho de causa).
                     4. Use parágrafos curtos.
+                    5. Se não tiver nome do Cliente, chame de Cliente.
                     
                     FORMATO DE SAÍDA:
                     - 📌 O que aconteceu: (Resumo em 1 frase simples)
@@ -301,14 +388,12 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
                             contents=prompt
                         )
                         
-                        # Métricas e Logs
                         end_time = time.time()
                         duration = end_time - start_time
                         usage = response.usage_metadata
                         t_in = usage.prompt_token_count if usage else 0
                         t_out = usage.candidates_token_count if usage else 0
                         
-                        # Salva Log
                         SaaSLogger.log_generation(
                             user_id=USER_ID_ATUAL,
                             input_text=st.session_state.texto_processo,
@@ -329,28 +414,130 @@ if st.button("✨ GERAR EXPLICAÇÃO", type="primary"):
                     SaaSLogger.log_event(USER_ID_ATUAL, "error_api", str(e))
                     st.error(f"Erro ao processar: {e}")
 
+tab_traducao, tab_historico = st.tabs(
+    ["📝 Tradução", "📜 Histórico"]
+)
 # --- RESULTADO ---
-if st.session_state.mensagem_final:
-    st.markdown("---")
-    st.subheader("📱 Mensagem Pronta")
-    
-    mensagem_editada = st.text_area(
-        "Revise antes de enviar:",
-        value=st.session_state.mensagem_final,
-        height=250
-    )
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        if st.button("Nova Consulta (Limpar)", on_click=limpar_tudo, key="btn_limpar"):
-            pass
+with tab_traducao:
+    if st.session_state.mensagem_final:
+        st.markdown("<h2 style='color: black; margin-bottom: 10px;'>Mensagem Pronta</h2>", unsafe_allow_html=True)
 
-    with col2:
-        msg_encoded = quote(mensagem_editada, safe='')
-        link_wa = f"https://wa.me/?text={msg_encoded}"
-        st.markdown(f"""
-            <a href="{link_wa}" target="_blank" class="whatsapp-btn">
+        mensagem_editada = st.text_area(
+            "Revise antes de enviar:",
+            value=st.session_state.mensagem_final,
+            height=250
+        )
+
+        col1, col2 = st.columns([4, 1])
+
+        with col1:
+            st.code(mensagem_editada, language=None)
+            st.caption("☝️ Clique no ícone acima para copiar")
+
+        with col2:
+            st.empty()  # pode usar pra algo depois ou remover totalmente
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ---- BOTÃO WHATSAPP (FULL WIDTH) ----
+        params = {"text": mensagem_editada}
+        link_wa = f"https://wa.me/?{urlencode(params, encoding='utf-8')}"
+        
+        st.markdown(
+            f"""
+            <a href="{link_wa}" target="_blank" style="
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #25D366;
+                color: white;
+                font-weight: 800;
+                padding: 14px;
+                border-radius: 10px;
+                text-decoration: none;
+                text-align: center;
+                width: 100%;
+                margin-bottom: 12px;
+                font-size: 16px;
+            ">
                 📲 Enviar no WhatsApp
             </a>
-        """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True
+        )
+
+        # ---- BOTÃO LIMPAR ----
+        st.button(
+            "🗑️ Limpar Tudo e Iniciar Novo",
+            on_click=limpar_tudo,
+            use_container_width=True
+        )
+with tab_historico:
+    st.markdown("<h2 style='color: black; margin-bottom: 10px;'>Histórico de Traduções</h2>", unsafe_allow_html=True)
+
+    if info["plan_status"] == "free":
+        st.info("ℹ️ Plano Grátis: Você vê o histórico das últimas 24 horas.")
+    else:
+        st.success("💎 Plano Pro: Visualizando histórico completo do mês.")
+
+    if st.button("🔄 Atualizar Histórico"):
+        st.rerun()
+
+    historico = SaaSLogger.get_history(
+        USER_ID_ATUAL,
+        info["plan_status"]
+    )
+    st.markdown("""
+    <style>
+    /* Setinha (arrow) do expander */
+    details summary svg {
+        fill: black !important;
+        stroke: black !important;
+    }
+
+    /* Texto do título do expander */
+    details summary {
+        color: black !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+    if not historico:
+        st.write("Nenhum histórico encontrado para o período.")
+    else:
+        tz_sp = ZoneInfo("America/Sao_Paulo")
+
+        for item in historico:
+            # Converte a data do Supabase (UTC) para São Paulo
+            data_utc = datetime.fromisoformat(item["created_at"])
+            data_sp = data_utc.astimezone(tz_sp)
+            data_formatada = data_sp.strftime("%d/%m/%Y %H:%M")
+
+            with st.expander(f"📅 {data_formatada}"):
+                st.markdown(
+                    "<h2 style='color: black; margin-bottom: 10px;'>Original</h2>",
+                    unsafe_allow_html=True
+                )
+
+                st.markdown(
+                    f"""
+                    <p style="
+                        color: black;
+                        font-size: 14px;
+                        line-height: 1.6;
+                        white-space: pre-wrap;
+                        margin: 0;
+                    ">
+                        {item["input_text"][:150] + "..." if len(item["input_text"]) > 150 else item["input_text"]}
+                    </p>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                st.markdown(
+                    "<h2 style='color: black; margin-bottom: 10px;'>Tradução</h2>",
+                    unsafe_allow_html=True
+                )
+
+                st.code(item["output_text"], language=None)
